@@ -1,0 +1,63 @@
+# Archivos e imágenes de outputs
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Jupyter notebook checkpoints y metadata
+.ipynb_checkpoints/
+*.ipynb-meta
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Archivos de entorno/virtualenv
+.env
+.venv
+env/
+venv/
+ENV/
+*.env
+
+# Archivos de instalación/paquetes
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Datos y logs
+*.csv
+*.dat
+*.log
+*.out
+*.h5
+*.hdf5
+*.sqlite
+*.db
+
+# Archivos ocultos de sistema/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Otros outputs típicos
+*.wav
+*.iq
+*.bin
+*.pkl
+
+# Archivos de backup de editores
+*~
+*.bak
+
+# (Opcional) Carpeta resultados o cualquier nombre custom tuyo
+resultados/
+outputs/
