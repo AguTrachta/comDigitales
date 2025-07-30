@@ -1,89 +1,89 @@
-# Proyecto OFDM – Trabajo Final
+# Simulación de un Sistema OFDM Completo
 
-Este repositorio contiene una **cadena OFDM modular** implementada en Python/Jupyter.  La estructura está pensada para que cualquier miembro del equipo pueda:
+Este repositorio contiene la implementación y simulación de una cadena de transmisión y recepción **OFDM (Orthogonal Frequency Division Multiplexing)**, desarrollada en Python utilizando Jupyter Notebook. El proyecto sigue una estructura modular y está diseñado para ser reproducible y fácil de entender, sirviendo como material de estudio y experimentación.
 
-* localizar rápidamente cada bloque (generación de bits, IFFT, AWGN …),
-* ejecutar sólo las secciones que necesite para probar cambios,
-* versionar código core separado de los cuadernos de experimentación.
+El código se basa en los principios teóricos descritos en papers académicos sobre OFDM, como el de Göran Lindell, adaptando los conceptos a una implementación práctica y verificable.
 
 ---
 
-## Árbol de carpetas
+## 🏗️ Estructura del Proyecto
 
-```text
+El repositorio está organizado para separar el código reutilizable de la experimentación, facilitando el mantenimiento y la colaboración.
+
+```
 ofdm-trabajo-final/
 │
-├── .venv/                # entorno virtual (IGNORADO por git)
-├── pyproject.toml        # dependencias y metadatos del paquete
-├── README.md             # (este archivo)
+├── .venv/                   # Entorno virtual de Python (ignorado)
+├── pyproject.toml           # Dependencias y metadatos del proyecto
+├── README.md                # Este archivo
 │
-├── src/                  # código reusable, instalable como paquete
+├── src/                     # Código fuente del paquete 'ofdm_tf'
 │   └── ofdm_tf/
-│       ├── params.py     # PARÁMETROS globales (Bloque 0)
-│       ├── mapping.py    # QPSK, 16‑QAM, Gray, etc.
-│       ├── fft.py        # IFFT/FFT wrappers y normalizaciones
-│       ├── channel.py    # canal AWGN / multipath
-│       ├── utils.py      # helpers (Eb/N0, BER, dB<->lin…)
-│       └── tests/        # unit tests (pytest)
+│       ├── __init__.py
+│       ├── params.py        # PARÁMETROS globales de la simulación
+│       ├── mapping.py       # Mapeo/Demapeo de constelaciones (QPSK)
+│       ├── fft.py           # Funciones para IFFT/FFT
+│       ├── channel.py       # Modelos de canal (AWGN, etc.)
+│       └── utils.py         # Funciones auxiliares (BER, dB, etc.)
 │
-├── notebooks/            # demostraciones paso a paso
-│   ├── 00_parametros.ipynb
-│   ├── 01_generador_bits.ipynb
-│   ├── …
-│   └── 12_ber_awgn.ipynb
+├── notebooks/               # Cuadernos de experimentación
+│   └── ofdm_simulation.ipynb  # NOTEBOOK PRINCIPAL con todos los bloques
 │
-├── data/
-│   ├── raw/              # capturas IQ u originales grandes
-│   └── processed/        # .npy / .csv intermedios
+├── data/                    # Datos (si aplica)
+│   ├── raw/
+│   └── processed/
 │
-├── figures/              # constelaciones y curvas BER exportadas
+├── figures/                 # Gráficos y figuras generadas
 │
-└── docs/                 # PDFs de referencia / informe escrito
-    ├── Dialnet-ModulacionMultiportadoraOFDM-4797263.pdf
-    └── plan_de_ataque.pdf
+└── docs/                    # Documentación y papers de referencia
+```
+### 🚀 Instalación Rápida
+
+Para ejecutar la simulación, clona el repositorio, activa tu entorno virtual y ejecuta:
+
+```bash
+# Instala el paquete 'ofdm_tf' en modo editable
+python -m pip install -e .
 ```
 
-> **Instalación rápida**
->
-> ```bash
-> # activa tu .venv primero
-> python -m pip install -e .            # modo editable → importa ofdm_tf
-> pip install -r requirements.txt       # si no usas pyproject
-> ```
+El modo editable (`-e`) permite que los cambios que hagas en el código de la carpeta `src/` se reflejen inmediatamente en las importaciones del notebook sin necesidad de reinstalar.
 
 ---
 
-## Bloques de desarrollo
+## 📖 Plan de Desarrollo: Bloques Funcionales
 
-| #  | Notebook                  | Módulo clave            | Objetivo                    | Validación mínima        |
-| -- | ------------------------- | ----------------------- | --------------------------- | ------------------------ |
-| 0  | `00_parametros.ipynb`     | `src/ofdm_tf/params.py` | Definir N, M, L\_cp, etc.   | `assert Δf·T_u = 1`      |
-| 1  | `01_generador_bits.ipynb` | `utils.random_bits()`   | Secuencia binaria aleatoria | Histograma 0 ≈ 1         |
-| 2  | `02_mapping.ipynb`        | `mapping.gray_map()`    | Mapear bits → símbolos      | Scatter QPSK normalizado |
-| 3  | `03_subcarriers.ipynb`    | —                       | Vector X\[k] tamaño N       | Print primeros 8 valores |
-| 4  | `04_ifft.ipynb`           | `fft.ifft_block()`      | Señal tiempo x\[n]          | `np.fft.fft(ifft(X))≅X`  |
-| 5  | `05_cyclic_prefix.ipynb`  | `utils.add_cp()`        | Insertar prefijo L\_cp      | Long. = N+L\_cp          |
-| 6  | `06_serial_tx.ipynb`      | —                       | Trama continua              | Onda sin saltos          |
-| 7  | `07_channel_ideal.ipynb`  | `channel.identity()`    | Pasar por canal ideal       | BER = 0                  |
-| 8  | `08_remove_cp.ipynb`      | `utils.remove_cp()`     | Cortar CP                   | Señal igual a x\[n]      |
-| 9  | `09_fft_rx.ipynb`         | `fft.fft_block()`       | Recuperar Y\[k]             | Y ≅ X                    |
-| 10 | `10_demapping.ipynb`      | `mapping.gray_demap()`  | Símbolo → bits              | BER = 0                  |
-| 11 | `11_awgn.ipynb`           | `channel.add_awgn()`    | Añadir ruido Eb/N0          | Scatter vs SNR           |
-| 12 | `12_ber_curve.ipynb`      | `utils.ber_theory()`    | BER simulado vs teórico     | Curva semilog            |
+Aunque todo el flujo se implementa en un único notebook (`ofdm_simulation.ipynb`), el desarrollo sigue una secuencia de bloques lógicos bien definidos, cada uno con un objetivo y una forma de validación clara.
 
-**Hitos sugeridos**
+| #  | Bloque Funcional          | Módulo Clave            | Objetivo Principal                                    | Validación Mínima                                    |
+| -- | ------------------------- | ----------------------- | ----------------------------------------------------- | ---------------------------------------------------- |
+| 0  | **Configuración**         | `src/ofdm_tf/params.py` | Definir N, K, L, etc. y sus derivados.                | `assert` de coherencia en los parámetros.            |
+| 1  | **Generador de Bits**     | `numpy.random`          | Crear la secuencia de datos binarios de origen.       | Histograma de bits con distribución ~50/50.          |
+| 2  | **Mapeo de Símbolos**     | `mapping.py`            | Convertir bits a símbolos de constelación QPSK.       | Diagrama de constelación normalizado ($E_s=1$).      |
+| 3  | **Mapeo a Subportadoras** | —                       | Construir el vector de frecuencia `X[k]` (tamaño N).  | Inspección visual del vector con símbolos y ceros.   |
+| 4  | **Modulación IFFT**       | `fft.py`                | Transformar del dominio de la frecuencia al tiempo `x[n]`. | `fft(ifft(X)) ≅ X` (propiedad de la transformada). |
+| 5  | **Prefijo Cíclico (CP)**  | `utils.py`              | Añadir el prefijo cíclico para mitigar la ISI.        | Longitud del símbolo = `N + L`.                      |
+| 6  | **Serialización**         | `numpy.reshape`         | Concatenar símbolos para crear la trama a transmitir. | Verificación de la longitud total de la trama.       |
+| 7  | **Paso por Canal**        | `channel.py`            | Simular el efecto del canal (ideal o con ruido).      | **Canal Ideal:** BER = 0.                              |
+| 8  | **Eliminación del CP**    | `utils.py`              | Descartar el prefijo cíclico en el receptor.          | Longitud del bloque recibido = `N`.                  |
+| 9  | **Demodulación FFT**      | `fft.py`                | Transformar de vuelta al dominio de la frecuencia `Y[k]`. | **Canal Ideal:** `Y[k] ≅ X[k]`.                        |
+| 10 | **Demapeo de Símbolos**   | `mapping.py`            | Decidir los bits a partir de los símbolos recibidos.  | **Canal Ideal:** Bits recibidos = Bits transmitidos. |
+| 11 | **Simulación con Ruido**  | `channel.py`            | Añadir Ruido Gaussiano Blanco Aditivo (AWGN).         | Diagrama de constelación ruidoso, varianza correcta. |
+| 12 | **Curva BER**             | `utils.py`              | Medir el rendimiento (BER) vs. $E_b/N_0$.             | Curva simulada vs. curva teórica de QPSK.            |
 
-* **Semana 1** → Bloques 0–5 funcionando (IFFT con CP, sin canal).
-* **Semana 2** → Cadena tx/rx ideal completa (BER 0).
-* **Semana 3** → AWGN + curva BER comparada con teoría.
+### ✅ Hitos Clave
+
+1.  **Transmisor Funcional:** Implementar los bloques 0 a 6. El resultado es una trama OFDM completa lista para ser transmitida.
+2.  **Cadena Ideal Tx/Rx:** Completar los bloques 7 a 10 con un canal ideal. El objetivo es lograr una Tasa de Error de Bit (BER) de cero, validando la lógica de la cadena.
+3.  **Simulación de Rendimiento:** Implementar los bloques 11 y 12 para analizar el sistema en un canal con ruido (AWGN) y comparar los resultados con la teoría.
 
 ---
 
-## Buenas prácticas rápidas
+## 🛠️ Buenas Prácticas
 
-* **Un solo origen de la verdad**: todos los cuadernos importan `ofdm_tf.params`  ⇒ cambia una vez y se propaga.
-* **Tests antes de cada commit**: `pytest -q` debe estar limpio.
-* **nbstripout**: evita subir salidas enormes de notebooks.
-* **figures/**: guarda las imágenes con nombres auto‑explicativos (`ber_qpsk.png`).
+*   **Fuente Única de Verdad:** Todos los parámetros se importan desde `src/ofdm_tf/params.py`. Un cambio en este archivo se propaga a toda la simulación.
+*   **Código Reutilizable:** Las funciones complejas o repetitivas se alojan en los módulos de `src/` para mantener el notebook limpio y centrado en la experimentación.
+*   **Nombres Descriptivos:** Las figuras y artefactos generados se guardan con nombres que explican su contenido (ej: `ber_qpsk_awgn.png`).
+*   **Control de Versiones Limpio:** Se recomienda configurar `nbstripout` para evitar subir los outputs de los notebooks al repositorio Git, manteniendo los commits ligeros.
 
-¡Listo!  Con esta guía tu compañero puede clonar el repo, instalar dependencias y empezar por el notebook 00 sin preguntarte dónde está cada cosa.
+```
+```
