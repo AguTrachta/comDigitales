@@ -11,32 +11,33 @@ import numpy as np
 RNG = np.random.default_rng(seed=42)
 
 # --- Parámetros Base de la Simulación ---------------------------------
-N = 64          # Tamaño de la FFT (número de subportadoras)
+K = 64          # Tamaño de la FFT (número de subportadoras)
+N = 80          # Tamaño de la IFFT/DFT (N > K). 
+                # Elegimos una potencia de 2 o un número con factores pequeños para una IFFT eficiente.
 M = 4           # Orden de modulación (4-QPSK)
-L_cp = N // 4   # Longitud del prefijo cíclico (25% de N)
+L = N // 4   # Longitud del prefijo cíclico (25% de N)
 N_sym = 10_000  # Número de símbolos OFDM a simular
 
 # --- Parámetros de la Señal ------------------------------------------
-Fs = 1.0        # Frecuencia de muestreo (normalizada)
 Es = 1.0        # Energía promedio por símbolo de constelación (normalizada)
+f_delta = 1.0   # Espaciado entre subportadoras (normalizado)
 
 # --- Parámetros Derivados (calculados automáticamente) ----------------
-mu = int(np.log2(M))  # Bits por símbolo de constelación (QPSK -> 2)
-Tu = N / Fs           # Duración del símbolo útil (tiempo de la IFFT)
-T_cp = L_cp / Fs      # Duración del prefijo cíclico
-T_sym = Tu + T_cp     # Duración total del símbolo OFDM
-delta_f = 1 / Tu      # Espaciado de frecuencia entre subportadoras
+mu = int(np.log2(M))  # Bits por símbolo (log2(4) = 2 para QPSK)
+T_obs = 1 / f_delta   # Duración del símbolo útil (sin CP)
+fsamp = N * f_delta   # Frecuencia de muestreo
+T_cp = L / fsamp      # Duración del prefijo cíclico
+T_s = T_obs + T_cp    # Duración total del símbolo OFDM
 
 # --- Verificaciones de Coherencia (Sanity Checks) --------------------
-assert 2**mu == M, "M debe ser una potencia de 2."
-assert N >= L_cp, "El prefijo cíclico no puede ser más largo que el símbolo."
-assert (N * mu) % 8 == 0, "Para simplicidad, aseguremos que cada bloque de datos sea un número entero de bytes."
+print(f"Número de subportadoras de datos (K): {K}")
+print(f"Tamaño de la IFFT (N): {N}")
+print(f"Longitud del Prefijo Cíclico (L): {L}")
+print(f"Duración útil (T_obs): {T_obs:.2f} s")
+print(f"Duración CP (T_cp): {T_cp:.2f} s")
+print(f"Duración total del símbolo (T_s): {T_s:.2f} s")
+print(f"Frecuencia de muestreo (fsamp): {fsamp:.2f} Hz")
+print(f"Espaciado de subportadoras (f_delta): {f_delta:.2f} Hz")
 
-# --- Diccionario de Parámetros (opcional, útil para logging) ---------
-PARAMS_DICT = {
-    'N': N, 'M': M, 'mu': mu, 'L_cp': L_cp, 'N_sym': N_sym,
-    'Fs': Fs, 'Es': Es, 'Tu': Tu, 'T_cp': T_cp, 'T_sym': T_sym,
-    'delta_f': delta_f, 'seed': 42
-}
-
-print("Módulo de parámetros 'params.py' cargado correctamente.")
+assert N >= K, "El tamaño de la IFFT (N) debe ser mayor o igual que el número de subportadoras (K)."
+print("\n--- Parámetros configurados correctamente ---")
