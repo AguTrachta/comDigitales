@@ -1,58 +1,73 @@
 # src/ofdm_tf/mapping.py
 
 """
-Módulo para el mapeo de bits a símbolos (constelaciones) y
-el mapeo de símbolos a subportadoras.
+Módulo para el mapeo de símbolos a subportadoras, siguiendo
+la formulación de G. Lindell.
 """
 import numpy as np
 from . import params as p
 
-def get_subcarrier_indices():
+def get_baseband_freq_indices():
     """
-    Calcula los índices de las subportadoras de datos dentro del vector de la IFFT.
+    Calcula los índices de frecuencia de paso bajo (g_k) para cada subportadora de datos.
 
-    Esta función implementa una estrategia de mapeo de paso bajo, dejando la
-    componente DC (índice 0) y la de Nyquist (N/2) a cero.
-    Maneja tanto K par como impar.
+    La función sigue las Ecuaciones (1.9) y (1.10) de Lindell.
+    
+    Returns:
+        np.ndarray: Un array de tamaño K con los índices g_k.
+        int: El valor de g_0 (el índice g_k más bajo).
+        int: El valor de g_{K-1} (el índice g_k más alto).
+    """
+    k = np.arange(p.K)  # Índices de 0 a K-1
+    
+    if p.K % 2 == 0:  # Caso K par
+        k_rc = (p.K - 2) // 2
+        g_k = k - k_rc
+    else:  # Caso K impar
+        k_rc = (p.K - 1) // 2
+        g_k = k - k_rc
+        
+    g0 = g_k[0]
+    gK_minus_1 = g_k[-1]
+    
+    # Verificación de consistencia
+    assert g_k[k_rc] == 0, "El índice de la portadora de referencia no es 0."
+    
+    return g_k, g0, gK_minus_1
+
+def map_symbols_to_ifft_input(ak_symbols, dtype=complex): 
+    """
+    Construye el vector de entrada para la IFFT (X_m) a partir de un
+    vector de K símbolos de datos (a_k), siguiendo las Ecuaciones (2.19)-(2.21).
+
+    Args:
+        ak_symbols (np.ndarray): Array de K símbolos.
+        dtype (type, optional): Tipo de dato del array de salida. Default: complex.
 
     Returns:
-        (np.ndarray, np.ndarray): Una tupla conteniendo:
-            - all_subcarriers: Array con todos los índices de las subportadoras de datos.
-            - data_carriers_pos: Array con los índices de las frecuencias positivas.
-            - data_carriers_neg: Array con los índices de las frecuencias negativas.
+        np.ndarray: Array de N elementos (X_m), listo para la IFFT.
     """
-    # Se reserva la componente DC (índice 0)
-    # Se crea un espectro simétrico en la medida de lo posible.
-
-    if p.K % 2 == 0:
-        # K es par: Mapeo perfectamente simétrico.
-        # K/2 para frec. positivas, K/2 para frec. negativas.
-        n_pos = p.K // 2
-        n_neg = p.K // 2
-        
-        # Índices para frecuencias positivas (ej: 1, 2, ..., 32)
-        carriers_pos = np.arange(1, n_pos + 1)
-        # Índices para frecuencias negativas (ej: 80-32, ..., 79)
-        carriers_neg = np.arange(p.N - n_neg, p.N)
-        
-    else:
-        # K es impar: Mapeo asimétrico.
-        # Se pone una subportadora más en el lado positivo.
-        n_pos = (p.K + 1) // 2
-        n_neg = (p.K - 1) // 2
-        
-        carriers_pos = np.arange(1, n_pos + 1)
-        carriers_neg = np.arange(p.N - n_neg, p.N)
-
-    all_carriers = np.concatenate([carriers_pos, carriers_neg])
+    assert len(ak_symbols) == p.K, f"Se esperaban {p.K} símbolos, pero se recibieron {len(ak_symbols)}."
     
-    # Verificación de consistencia interna
-    assert len(all_carriers) == p.K
+    if not hasattr(map_symbols_to_ifft_input, 'g_k_params'):
+        map_symbols_to_ifft_input.g_k_params = get_baseband_freq_indices()
     
-    return all_carriers, carriers_pos, carriers_neg
+    g_k, g0, gK_minus_1 = map_symbols_to_ifft_input.g_k_params
 
-# Pre-calculamos los índices para que estén disponibles en el módulo
-# Esta es una buena práctica para no recalcularlos cada vez.
-ALL_SUBCARRIER_INDICES, DATA_CARRIERS_POS, DATA_CARRIERS_NEG = get_subcarrier_indices()
+    # Usamos el dtype proporcionado. Para la prueba simbólica será 'object' o 'str'.
+    X_m = np.zeros(p.N, dtype=dtype) 
+    
+    # Regla 1: DC y Frecuencias Positivas
+    m_range_pos = np.arange(0, gK_minus_1 + 1)
+    k_indices_pos = m_range_pos - g0
+    X_m[m_range_pos] = ak_symbols[k_indices_pos]
+    
+    # Regla 3: Frecuencias Negativas
+    if g0 < 0:
+        m_range_neg = np.arange(g0 + p.N, p.N)
+        k_indices_neg = m_range_neg - (g0 + p.N)
+        X_m[m_range_neg] = ak_symbols[k_indices_neg]
+        
+    return X_m
 
-print("Módulo 'mapping.py' cargado. Índices de subportadoras calculados.")
+print("Módulo 'mapping.py' cargado y listo.")
