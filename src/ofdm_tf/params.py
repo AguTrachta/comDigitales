@@ -11,12 +11,12 @@ import numpy as np
 RNG = np.random.default_rng(seed=42)
 
 # --- Parámetros Base de la Simulación ---------------------------------
-K = 64          # Tamaño de la FFT (número de subportadoras)
-N = 80          # Tamaño de la IFFT/DFT (N > K). 
+K = 12          # número de subportadoras
+N = 16          # Tamaño de la IFFT/DFT (N > K). Cantidad de muestras.
                 # Elegimos una potencia de 2 o un número con factores pequeños para una IFFT eficiente.
 M = 4           # Orden de modulación (4-QPSK)
 L = N // 4   # Longitud del prefijo cíclico (25% de N)
-N_sym = 10_000  # Número de símbolos OFDM a simular
+N_sym = 1000  # Número de símbolos OFDM a simular
 
 # --- Parámetros de la Señal ------------------------------------------
 Es = 1.0        # Energía promedio por símbolo de constelación (normalizada)
