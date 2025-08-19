@@ -15,7 +15,7 @@ K = 12          # número de subportadoras
 N = 16          # Tamaño de la IFFT/DFT (N > K). Cantidad de muestras.
                 # Elegimos una potencia de 2 o un número con factores pequeños para una IFFT eficiente.
 M = 4           # Orden de modulación (4-QPSK)
-L = N // 4   # Longitud del prefijo cíclico (25% de N)
+L = 5   # Longitud del prefijo cíclico (25% de N)
 N_sym = 1000  # Número de símbolos OFDM a simular
 
 # --- Parámetros de la Señal ------------------------------------------
