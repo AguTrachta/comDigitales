@@ -1,0 +1,15 @@
+#  Requirements for OFDM Simulation Project
+# ==========================================================
+#
+# Para crear e instalar en un entorno virtual:
+# 1. python -m venv venv
+# 2. source venv/bin/activate  (en Linux/macOS) o venv\Scripts\activate (en Windows)
+# 3. pip install -r requirements.txt
+# ----------------------------------------------------------
+
+# Biblioteca fundamental para computación científica y arrays N-dimensionales.
+numpy
+pandas
+matplotlib
+seaborn
+scipy
