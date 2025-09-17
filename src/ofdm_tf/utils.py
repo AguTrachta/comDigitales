@@ -6,7 +6,6 @@ y generación de ruido gaussiano complejo.
 """
 
 import numpy as np
-import params as p
 
 
 # ============================================================
