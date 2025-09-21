@@ -2,6 +2,7 @@
 
 import numpy as np
 from . import params as p
+from . import utils as u
 
 # --- Definición del Canal Multipath ---
 # channel_taps seria h[n] Lindell la define en la Ecuación (5.3) como una suma de deltas de Dirac. 
@@ -53,6 +54,50 @@ if p.L < L_CP_req:
     raise ValueError(f"CP insuficiente: p.L={p.L} < L_req={L_CP_req} (n0={n0}, n1={n1}).")
 if p.L >= p.N:
     raise ValueError("CP no puede ser >= N (no quedaría parte útil).")
+
+"""
+Define la función principal que modela el canal de comunicación.
+Actúa como un conmutador para seleccionar entre diferentes tipos de canal
+(ideal, AWGN, etc.) e invoca las funciones auxiliares correspondientes.
+"""
+
+def apply_channel(signal, channel_type="ideal", ebn0_db=None):
+    """
+    Aplica el modelo de canal seleccionado a la señal de entrada.
+
+    Args:
+        signal (np.array): La señal de banda base transmitida (compleja).
+        channel_type (str): El tipo de canal a aplicar.
+                            Opciones: "ideal", "awgn".
+        ebn0_db (float, optional): La relación Eb/N0 en dB. Requerido si
+                                   el canal no es "ideal". Defaults to None.
+
+    Returns:
+        np.array: La señal después de pasar por el canal.
+    """
+    if channel_type == "ideal":
+        # El canal identidad no altera la señal.
+        return signal
+    
+    elif channel_type == "awgn":
+        # Asegurarse de que se proporcionó un valor de Eb/N0.
+        if ebn0_db is None:
+            raise ValueError("El canal 'awgn' requiere un valor para ebn0_db.")
+        
+        # Calcular la penalización por el prefijo cíclico (eta)
+        # eta = Tiempo útil / Tiempo total
+        eta = p.N / (p.N + p.L)
+        
+        # Invocar la función de utils que ya considera la penalización del CP.
+        return u.add_awgn_with_cp(signal, ebn0_db, eta)
+        
+    # Aquí se podrían añadir más tipos de canal en el futuro (ej. "rayleigh")
+    # elif channel_type == "rayleigh":
+    #     ...
+        
+    else:
+        raise ValueError(f"Tipo de canal '{channel_type}' no soportado. "
+                         "Opciones válidas: 'ideal', 'awgn'.")
 
 print("Módulo 'channel.py' cargado.")
 print(f"  - h (taps): {np.round(CHANNEL_TAPS, 3)}")
