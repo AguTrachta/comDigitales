@@ -6,7 +6,7 @@ y generación de ruido gaussiano complejo.
 """
 
 import numpy as np
-
+from . import params as p
 
 # ============================================================
 # Conversión entre escalas
@@ -90,7 +90,7 @@ def add_awgn(signal, EbN0_dB):
     """
     N0 = calculate_noise_variance(EbN0_dB)
     sigma = np.sqrt(N0/2)   # desviación estándar por dimensión
-    noise = sigma * (np.random.randn(*signal.shape) + 1j*np.random.randn(*signal.shape))
+    noise = sigma * (p.RNG.standard_normal(*signal.shape) + 1j*p.RNG.standard_normal(*signal.shape))
     return signal + noise
 
 
@@ -112,5 +112,5 @@ def add_awgn_with_cp(signal, EbN0_dB, eta):
     """
     N0 = calculate_noise_variance_with_cp(EbN0_dB, eta)
     sigma = np.sqrt(N0/2)
-    noise = sigma * (np.random.randn(*signal.shape) + 1j*np.random.randn(*signal.shape))
+    noise = sigma * (p.RNG.standard_normal(*signal.shape) + 1j*p.RNG.standard_normal(*signal.shape))
     return signal + noise
