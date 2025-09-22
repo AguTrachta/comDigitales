@@ -91,10 +91,6 @@ def apply_channel(signal, channel_type="ideal", ebn0_db=None):
         # Invocar la función de utils que ya considera la penalización del CP.
         return u.add_awgn_with_cp(signal, ebn0_db, eta)
         
-    # Aquí se podrían añadir más tipos de canal en el futuro (ej. "rayleigh")
-    # elif channel_type == "rayleigh":
-    #     ...
-        
     else:
         raise ValueError(f"Tipo de canal '{channel_type}' no soportado. "
                          "Opciones válidas: 'ideal', 'awgn'.")
