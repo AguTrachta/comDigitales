@@ -121,7 +121,7 @@ def add_awgn_with_cp(signal, EbN0_dB, eta):
     noise = sigma * (p.RNG.standard_normal(*signal.shape) + 1j*p.RNG.standard_normal(*signal.shape))
     return signal + noise
 
-def run_montecarlo_simulation(ebn0_db_range, min_errors=100, max_bits=5_000_000):
+def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits):
     """
     Ejecuta una simulación OFDM de Monte Carlo sobre un rango de Eb/N0.
     (La descripción de la función sigue siendo la misma)
