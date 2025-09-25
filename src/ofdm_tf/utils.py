@@ -11,6 +11,8 @@ from . import params as p
 from . import mapping as mp
 from . import demapping as dmp
 from . import channel as ch
+from . import transmisor as transmisor
+from . import receptor as receptor
 
 # ============================================================
 # Conversión entre escalas
@@ -136,42 +138,25 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors=100, max_bits=5_000_000)
         print(f"\nSimulando para Eb/N0 = {ebn0_db} dB...")
 
         while total_errores < min_errors and total_bits_simulados < max_bits:
-            # --- 1. Generar una nueva tanda de bits ---
-            bits_por_tanda = p.N_sym * p.K * p.mu # Generar en bloques
-            bits_tx = p.RNG.integers(low=0, high=2, size=bits_por_tanda)
 
-            # --- 2. Transmisor OFDM ---
-            # Paso 2.1: Mapeo de Bits a Símbolos (lógica del notebook)
-            bits_reshaped = bits_tx.reshape(-1, p.mu)
-            ak_symbols_flat = (1 - 2*bits_reshaped[:, 1]) + 1j*(1 - 2*bits_reshaped[:, 0])
-            ak_symbols_flat /= np.sqrt(2)
-
-            # Paso 2.2: Agrupar símbolos y construir entrada de la IFFT
-            ak_matrix = ak_symbols_flat.reshape(-1, p.K)
-            X_matrix = np.zeros((ak_matrix.shape[0], p.N), dtype=complex)
-            for i in range(ak_matrix.shape[0]):
-                X_matrix[i, :] = mp.map_symbols_to_ifft_input(ak_matrix[i, :])
+            # --- Transmisor ---
+            bits_tx = transmisor.generate_bits(p.N_sym)
+            ak_symbols = transmisor.map_bits_to_symbols(bits_tx)
+            X_matrix = transmisor.build_ifft_input_matrix(ak_symbols, p.N_sym)
+            x_time = transmisor.modulate_with_ifft(X_matrix)
+            x_time_with_cp = transmisor.add_cyclic_prefix(x_time)
+            tx_signal = transmisor.parallel_to_serial(x_time_with_cp)
             
-            # Paso 2.3: IFFT y Prefijo Cíclico
-            x_time = np.fft.ifft(X_matrix, axis=1, norm='ortho')
-            cyclic_prefix = x_time[:, -p.L:]
-            x_time_with_cp = np.concatenate([cyclic_prefix, x_time], axis=1)
-            tx_signal_baseband = x_time_with_cp.flatten()
-
-            # --- 3. Canal AWGN ---
-            rx_signal = ch.apply_channel(tx_signal_baseband, "awgn", ebn0_db)
-
-            # --- 4. Receptor OFDM ---
-            rx_matrix_with_cp = rx_signal.reshape(-1, p.N + p.L)
-            rx_matrix_no_cp = rx_matrix_with_cp[:, p.L:]
-            Y_matrix = np.fft.fft(rx_matrix_no_cp, axis=1, norm='ortho')
-            ak_recovered_matrix = np.zeros((Y_matrix.shape[0], p.K), dtype=complex)
-            for i in range(Y_matrix.shape[0]):
-                ak_recovered_matrix[i, :] = dmp.extract_symbols_from_fft_output(Y_matrix[i, :])
-            ak_symbols_rx_flat = ak_recovered_matrix.flatten()
-            bits_rx = dmp.demap_symbols_to_bits(ak_symbols_rx_flat)
-
-            # --- 5. Acumular resultados ---
+            # --- Canal ---
+            rx_signal = ch.apply_channel(tx_signal, "awgn", ebn0_db)
+            
+            # --- Receptor ---
+            rx_matrix_with_cp = receptor.serial_to_parallel(rx_signal, p.N_sym)
+            rx_matrix_no_cp = receptor.remove_cyclic_prefix(rx_matrix_with_cp)
+            Y_matrix = receptor.demodulate_with_fft(rx_matrix_no_cp)
+            bits_rx = receptor.extract_and_demap_symbols(Y_matrix, p.N_sym)
+            
+            # --- Acumular resultados ---
             errores_en_tanda = np.sum(bits_tx != bits_rx)
             total_errores += errores_en_tanda
             total_bits_simulados += len(bits_tx)
