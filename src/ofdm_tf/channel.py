@@ -7,11 +7,13 @@ from . import utils as u
 # --- Definición del Canal Multipath ---
 # channel_taps seria h[n] Lindell la define en la Ecuación (5.3) como una suma de deltas de Dirac. 
 # Nuestro array es la versión muestreada de esa función, h[n].
-CHANNEL_TAPS = np.array([0, # h[0]   → camino directo (retardo 0)
-                         #0, # h[1]       → no hay eco a 1 muestra
-                         # np.sqrt(0.5) * np.exp(1j*np.pi/4), # h[2]   → eco a 2 muestras, -3 dB y +45°
-                         #0, 0, # h[3], h[4] → sin eco a 3 y 4 muestras
-                         #0.2
+CHANNEL_TAPS = np.array([1, # h[0]   → camino directo (retardo 0)
+                         0, # h[1]       → no hay eco a 1 muestra
+                         np.sqrt(0.5) * np.exp(1j*np.pi/4), # h[2]   → eco a 2 muestras, -3 dB y +45°
+                         0, 0, # h[3], h[4] → sin eco a 3 y 4 muestras
+                         0.2,
+                         0.3,
+                         0.4
                          ], dtype=complex) # h[5]   → eco a 5 muestras, -14 dB aprox., fase 0
 
 # channel_support calcula la version discreta de la duracion de la respuesta al impulso Tch.
@@ -85,12 +87,8 @@ def apply_channel(signal, channel_type="ideal", ebn0_db=None):
         if ebn0_db is None:
             raise ValueError("El canal 'awgn' requiere un valor para ebn0_db.")
         
-        # Calcular la penalización por el prefijo cíclico (eta)
-        # eta = Tiempo útil / Tiempo total
-        eta = p.N / (p.N + p.L)
-        
-        # Invocar la función de utils que ya considera la penalización del CP.
-        return u.add_awgn_with_cp(signal, ebn0_db, eta)
+        # Ahora llamamos a la nueva función basada en SNR de utils.
+        return u.add_awgn_snr(signal, ebn0_db)
         
     else:
         raise ValueError(f"Tipo de canal '{channel_type}' no soportado. "

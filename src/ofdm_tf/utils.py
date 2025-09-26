@@ -80,45 +80,48 @@ def calculate_noise_variance_with_cp(EbN0_dB, eta):
 # Canal AWGN
 # ============================================================
 
-def add_awgn(signal, EbN0_dB):
+def calculate_snr(EbN0_dB):
     """
-    Agrega ruido AWGN a una señal compleja.
-    
-    Parámetros:
-        signal : ndarray
-            Señal baseband compleja (puede ser OFDM ya modulado).
-        EbN0_dB : float
-            Relación Eb/N0 en dB.
-    
-    Retorna:
-        signal_noisy : ndarray
-            Señal con ruido agregado.
+    Convierte Eb/N0 a SNR para este sistema OFDM específico.
+    La SNR depende de la eficiencia espectral (bits por muestra).
     """
-    N0 = calculate_noise_variance(EbN0_dB)
-    sigma = np.sqrt(N0/2)   # desviación estándar por dimensión
-    noise = sigma * (p.RNG.standard_normal(*signal.shape) + 1j*p.RNG.standard_normal(*signal.shape))
-    return signal + noise
+    ebn0_lin = db2lin(EbN0_dB)
+    
+    # La eficiencia se define por los bits de datos (K*mu) que se envían
+    # en el tiempo que ocupan N muestras de la IFFT (la parte útil).
+    efficiency = (p.K * p.mu) / p.N
+    
+    snr_lin = ebn0_lin * efficiency
+    return snr_lin
 
-
-def add_awgn_with_cp(signal, EbN0_dB, eta):
+def add_awgn_snr(signal, ebn0_db):
     """
-    Agrega ruido AWGN a una señal considerando la penalización del CP.
+    Agrega ruido AWGN a una señal compleja basado en la SNR.
+    Este es el método correcto para un modelo de POTENCIA CONSTANTE.
     
-    Parámetros:
-        signal : ndarray
-            Señal baseband compleja.
-        EbN0_dB : float
-            Relación Eb/N0 en dB.
-        eta : float
-            Eficiencia útil (Tu / (Tu+Tcp)).
+    Args:
+        signal (np.ndarray): Señal baseband compleja (serializada).
+        ebn0_db (float): Relación Eb/N0 en dB.
     
-    Retorna:
-        signal_noisy : ndarray
-            Señal con ruido agregado (ajustada por CP).
+    Returns:
+        np.ndarray: Señal con ruido agregado.
     """
-    N0 = calculate_noise_variance_with_cp(EbN0_dB, eta)
-    sigma = np.sqrt(N0/2)
-    noise = sigma * (p.RNG.standard_normal(*signal.shape) + 1j*p.RNG.standard_normal(*signal.shape))
+    # 1. Calcular la potencia promedio real de la señal transmitida
+    signal_power = np.mean(np.abs(signal)**2)
+    
+    # 2. Convertir el Eb/N0 deseado a la SNR correspondiente para este sistema
+    snr_lin = calculate_snr(ebn0_db)
+    
+    # 3. Calcular la potencia de ruido necesaria para alcanzar esa SNR
+    # SNR = Potencia_Señal / Potencia_Ruido
+    # => Potencia_Ruido = Potencia_Señal / SNR
+    noise_power = signal_power / snr_lin
+    
+    # 4. Generar ruido con esa potencia.
+    # La potencia (varianza) se reparte entre la parte real y la imaginaria.
+    sigma = np.sqrt(noise_power / 2)
+    noise = sigma * (p.RNG.standard_normal(*signal.shape) + 1j * p.RNG.standard_normal(*signal.shape))
+    
     return signal + noise
 
 def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits):
