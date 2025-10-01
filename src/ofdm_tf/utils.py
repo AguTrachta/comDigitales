@@ -124,7 +124,7 @@ def add_awgn_snr(signal, ebn0_db):
     
     return signal + noise
 
-def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits):
+def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type="awgn"):
     """
     Ejecuta una simulación OFDM de Monte Carlo sobre un rango de Eb/N0.
     (La descripción de la función sigue siendo la misma)
@@ -151,7 +151,7 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits):
             tx_signal = transmisor.parallel_to_serial(x_time_with_cp)
             
             # --- Canal ---
-            rx_signal = ch.apply_channel(tx_signal, "awgn", ebn0_db)
+            rx_signal = ch.apply_channel(tx_signal, channel_type, ebn0_db)
             
             # --- Receptor ---
             rx_matrix_with_cp = receptor.serial_to_parallel(rx_signal, p.N_sym)

@@ -16,6 +16,48 @@ CHANNEL_TAPS = np.array([1, # h[0]   → camino directo (retardo 0)
                          0.4
                          ], dtype=complex) # h[5]   → eco a 5 muestras, -14 dB aprox., fase 0
 
+# --- Parámetros del Canal de Referencia (Tabla 4.2) ---
+# Tap | Delay (µs) | Avg. Power (dB)
+CHANNEL_TABLE = np.array([
+    [1, 0.000, -5.7], [2, 0.217, -7.6], [3, 0.512, -10.1], [4, 0.514, -10.2],
+    [5, 0.517, -10.2], [6, 0.674, -11.5], [7, 0.882, -13.4], [8, 1.230, -16.3],
+    [9, 1.287, -16.9], [10, 1.311, -17.1], [11, 1.349, -17.4], [12, 1.533, -19.0],
+    [13, 1.535, -19.0], [14, 1.622, -19.8], [15, 1.818, -21.5], [16, 1.836, -21.6],
+    [17, 1.884, -22.1], [18, 1.943, -22.6], [19, 2.048, -23.5], [20, 2.140, -24.3]
+])
+
+def map_channel_to_taps(channel_table, Ts_us=1.0):
+    """
+    Discretiza el canal de trayectos múltiples (tabla) a la respuesta
+    al impulso discreta h[n] usando el periodo de muestreo (Ts_us).
+    """
+    delays_us = channel_table[:, 1]
+    power_db = channel_table[:, 2]
+
+    power_lin = 10**(power_db/10.0)
+    sample_indices = np.round(delays_us / Ts_us).astype(int)
+    
+    max_index = np.max(sample_indices) if sample_indices.size > 0 else 0
+    
+    # 1. Usar un vector para acumular la POTENCIA LINEAL
+    P_accumulated = np.zeros(max_index + 1, dtype=float)
+    
+    for n_idx, P_lin in zip(sample_indices, power_lin):
+        # Acumular la potencia lineal (P)
+        P_accumulated[n_idx] += P_lin 
+    
+    # 2. CALCULAR h[n] a partir de la potencia acumulada
+    # h[n] = sqrt(P_acumulada). (creo que va dividido sobre 2)
+    h_taps = np.sqrt(P_accumulated).astype(complex) 
+    # -----------------------------
+        
+    return h_taps
+
+# --- Definición del Canal Multitap (h[n]) ---
+# Utilizamos el Ts definido por el sistema. 
+# 1 µs para un mapeo simple.
+CHANNEL_TAPS_2 = map_channel_to_taps(CHANNEL_TABLE, Ts_us=1.0) 
+
 # channel_support calcula la version discreta de la duracion de la respuesta al impulso Tch.
 # se fija donde esta el ultimo eco no despreciable
 
@@ -48,9 +90,9 @@ def required_cp_length(h, **kwargs):
     return max(0, n1 - n0)
 
 # --- Cálculo de la Longitud del Prefijo Cíclico ---
-n0, n1 = channel_support(CHANNEL_TAPS, mag_rel_thresh=1e-3)  # o energy_frac=0.99
+n0, n1 = channel_support(CHANNEL_TAPS_2, mag_rel_thresh=1e-3)  # o energy_frac=0.99
 L_h_eff = (n1 - n0 + 1) if n1 >= n0 else 0
-L_CP_req = required_cp_length(CHANNEL_TAPS, mag_rel_thresh=1e-3)
+L_CP_req = required_cp_length(CHANNEL_TAPS_2, mag_rel_thresh=1e-3)
 
 # --- Verificaciones ---
 if p.L < L_CP_req:
@@ -89,7 +131,21 @@ def apply_channel(signal, channel_type="ideal", ebn0_db=None):
         
         # Ahora llamamos a la nueva función basada en SNR de utils.
         return u.add_awgn_snr(signal, ebn0_db)
+    
+    elif channel_type == "multitap_awgn": # <-- ¡NUEVO MODO!
+        if ebn0_db is None:
+            raise ValueError("El canal 'multitap_awgn' requiere un valor para ebn0_db.")
+            
+        # 1. Aplicar la respuesta del impulso del canal (Convolución)
+        # Esto simula los ecos y el ISI.
+        h = CHANNEL_TAPS_2
         
+        # Usamos mode='same' para que la señal de salida tenga la misma 
+        # longitud que la de entrada.
+        signal_multitap = np.convolve(signal, h, mode='same')
+                
+        return u.add_awgn_snr(signal_multitap, ebn0_db)
+
     else:
         raise ValueError(f"Tipo de canal '{channel_type}' no soportado. "
                          "Opciones válidas: 'ideal', 'awgn'.")
