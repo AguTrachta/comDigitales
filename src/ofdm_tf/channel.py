@@ -34,29 +34,44 @@ def map_channel_to_taps(channel_table, Ts_us=1.0):
     delays_us = channel_table[:, 1]
     power_db = channel_table[:, 2]
 
-    power_lin = 10**(power_db/10.0)
-    sample_indices = np.round(delays_us / Ts_us).astype(int)
+    # 1. Convertir potencias de dB a lineal
+    power_lin = 10**(power_db / 10.0)
     
+    # 2. Normalizar las potencias para que su suma sea 1
+    power_lin_normalized = power_lin / np.sum(power_lin)
+    
+    # 3. Discretizar los retardos a índices de muestra
+    sample_indices = np.round(delays_us / Ts_us).astype(int)
     max_index = np.max(sample_indices) if sample_indices.size > 0 else 0
     
-    # 1. Usar un vector para acumular la POTENCIA LINEAL
-    P_accumulated = np.zeros(max_index + 1, dtype=float)
+    h_taps = np.zeros(max_index + 1, dtype=complex)
     
-    for n_idx, P_lin in zip(sample_indices, power_lin):
-        # Acumular la potencia lineal (P)
-        P_accumulated[n_idx] += P_lin 
-    
-    # 2. CALCULAR h[n] a partir de la potencia acumulada
-    # h[n] = sqrt(P_acumulada). (creo que va dividido sobre 2)
-    h_taps = np.sqrt(P_accumulated).astype(complex) 
-    # -----------------------------
+    # 4. Generar cada tap con una fase aleatoria
+    for n_idx, P_norm in zip(sample_indices, power_lin_normalized):
+        # Generar una variable compleja Gaussiana con media 0 y varianza 1
+        random_fade = (p.RNG.standard_normal() + 1j * p.RNG.standard_normal()) / np.sqrt(2)
+        
+        # Asignar la amplitud promedio (sqrt(Potencia)) multiplicada por el desvanecimiento aleatorio
+        # Se suma por si múltiples ecos caen en el mismo índice de muestra
+        h_taps[n_idx] += np.sqrt(P_norm) * random_fade
         
     return h_taps
 
-# --- Definición del Canal Multitap (h[n]) ---
-# Utilizamos el Ts definido por el sistema. 
-# 1 µs para un mapeo simple.
-CHANNEL_TAPS_2 = map_channel_to_taps(CHANNEL_TABLE, Ts_us=1.0) 
+# función para obtener el perfil de retardos estático
+
+def get_static_channel_profile(channel_table, Ts_us):
+    """
+    Calcula la respuesta al impulso que solo contiene la estructura
+    de retardos, para determinar la longitud máxima del canal.
+    """
+    delays_us = channel_table[:, 1]
+    sample_indices = np.round(delays_us / Ts_us).astype(int)
+    max_index = np.max(sample_indices) if sample_indices.size > 0 else 0
+    
+    # Creamos un vector que solo tiene '1' en las posiciones de los ecos
+    h_profile = np.zeros(max_index + 1)
+    h_profile[sample_indices] = 1
+    return h_profile
 
 # channel_support calcula la version discreta de la duracion de la respuesta al impulso Tch.
 # se fija donde esta el ultimo eco no despreciable
@@ -90,9 +105,18 @@ def required_cp_length(h, **kwargs):
     return max(0, n1 - n0)
 
 # --- Cálculo de la Longitud del Prefijo Cíclico ---
-n0, n1 = channel_support(CHANNEL_TAPS_2, mag_rel_thresh=1e-3)  # o energy_frac=0.99
+# Esta es la duración de una muestra de la IFFT en microsegundos.
+# T_obs está en segundos, fsamp en Hz. Ts = 1/fsamp.
+sampling_period_us = (1 / p.fsamp) * 1e6
+
+# CAMBIO 4: Calcular L_CP_req usando el perfil estático
+# Creamos el perfil de retardos basado en el Ts real de nuestro sistema.
+h_static_profile = get_static_channel_profile(CHANNEL_TABLE, Ts_us=sampling_period_us)
+
+# Ahora calculamos el L_CP_req sobre este perfil estático y predecible.
+n0, n1 = channel_support(h_static_profile)
 L_h_eff = (n1 - n0 + 1) if n1 >= n0 else 0
-L_CP_req = required_cp_length(CHANNEL_TAPS_2, mag_rel_thresh=1e-3)
+L_CP_req = required_cp_length(h_static_profile)
 
 # --- Verificaciones ---
 if p.L < L_CP_req:
@@ -132,18 +156,17 @@ def apply_channel(signal, channel_type="ideal", ebn0_db=None):
         # Ahora llamamos a la nueva función basada en SNR de utils.
         return u.add_awgn_snr(signal, ebn0_db)
     
-    elif channel_type == "multitap_awgn": # <-- ¡NUEVO MODO!
+    elif channel_type == "multitap_awgn":
         if ebn0_db is None:
             raise ValueError("El canal 'multitap_awgn' requiere un valor para ebn0_db.")
             
-        # 1. Aplicar la respuesta del impulso del canal (Convolución)
-        # Esto simula los ecos y el ISI.
-        h = CHANNEL_TAPS_2
+        # 1. Generar una NUEVA realización del canal de desvanecimiento
+        h = map_channel_to_taps(CHANNEL_TABLE, Ts_us=sampling_period_us) # Usar el Ts real del sistema
         
-        # Usamos mode='same' para que la señal de salida tenga la misma 
-        # longitud que la de entrada.
+        # 2. Aplicar la convolución
         signal_multitap = np.convolve(signal, h, mode='same')
-                
+        
+        # 3. Añadir ruido
         return u.add_awgn_snr(signal_multitap, ebn0_db)
 
     else:
@@ -154,3 +177,4 @@ print("Módulo 'channel.py' cargado.")
 print(f"  - h (taps): {np.round(CHANNEL_TAPS, 3)}")
 print(f"  - soporte efectivo: n0={n0}, n1={n1}  => L_h_eff={L_h_eff} taps")
 print(f"  - CP requerido: L_req={L_CP_req} (taps). CP configurado: L={p.L}")
+print(f"  - Período de muestreo del sistema (Ts): {sampling_period_us:.4f} µs")

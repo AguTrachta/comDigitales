@@ -127,9 +127,9 @@ def add_awgn_snr(signal, ebn0_db):
 def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type="awgn"):
     """
     Ejecuta una simulación OFDM de Monte Carlo sobre un rango de Eb/N0.
-    (La descripción de la función sigue siendo la misma)
+    Utiliza los parámetros globales (p.N_sym) para definir el tamaño de cada tanda.
     """
-    print("--- Iniciando Simulación de Monte Carlo para Curva BER ---")
+    print(f"--- Iniciando Simulación de Monte Carlo para Canal '{channel_type}' ---")
     ber_results = []
     start_time_total = time.time()
 
@@ -140,9 +140,12 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
         
         print(f"\nSimulando para Eb/N0 = {ebn0_db} dB...")
 
+        # El bucle 'while' se ejecuta, y en cada iteración procesa un bloque
+        # de 'p.N_sym' símbolos OFDM.
         while total_errores < min_errors and total_bits_simulados < max_bits:
 
             # --- Transmisor ---
+            # La cantidad de bits y símbolos por tanda ahora está controlada por p.N_sym
             bits_tx = transmisor.generate_bits(p.N_sym)
             ak_symbols = transmisor.map_bits_to_symbols(bits_tx)
             X_matrix = transmisor.build_ifft_input_matrix(ak_symbols, p.N_sym)
@@ -151,6 +154,8 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
             tx_signal = transmisor.parallel_to_serial(x_time_with_cp)
             
             # --- Canal ---
+            # En cada llamada, si el tipo es "multitap_awgn", la función
+            # apply_channel generará un nuevo h[n] aleatorio.
             rx_signal = ch.apply_channel(tx_signal, channel_type, ebn0_db)
             
             # --- Receptor ---
@@ -166,7 +171,7 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
             
             print(f"\r  -> Bits simulados: {total_bits_simulados}, Errores contados: {total_errores}", end="")
 
-        # --- 6. Calcular y guardar el BER para este punto ---
+        # --- El resto de la función no cambia ---
         ber_calculado = total_errores / total_bits_simulados if total_bits_simulados > 0 else 0
         ber_results.append(ber_calculado)
         
