@@ -29,6 +29,10 @@ fsamp = N * f_delta   # Frecuencia de muestreo
 T_cp = L / fsamp      # Duración del prefijo cíclico
 T_s = T_obs + T_cp    # Duración total del símbolo OFDM
 
+# --- Parámetros de Pilotos ---
+PILOT_SPACING = 4  # Inserta un piloto cada 4 subportadoras
+PILOT_VALUE = (1+1j) / np.sqrt(2) # El valor complejo que tendrán los pilotos (conocido por Tx y Rx)
+
 # --- Verificaciones de Coherencia (Sanity Checks) --------------------
 print(f"Número de subportadoras de datos (K): {K}")
 print(f"Tamaño de la IFFT (N): {N}")

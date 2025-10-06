@@ -133,6 +133,9 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
     ber_results = []
     start_time_total = time.time()
 
+    # Determinar si este modo de simulación necesita pilotos y ecualizador
+    use_pilots_and_eq = (channel_type == "multitap_eq")
+
     for ebn0_db in ebn0_db_range:
         total_bits_simulados = 0
         total_errores = 0
@@ -140,38 +143,58 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
         
         print(f"\nSimulando para Eb/N0 = {ebn0_db} dB...")
 
-        # El bucle 'while' se ejecuta, y en cada iteración procesa un bloque
-        # de 'p.N_sym' símbolos OFDM.
         while total_errores < min_errors and total_bits_simulados < max_bits:
-
             # --- Transmisor ---
-            # La cantidad de bits y símbolos por tanda ahora está controlada por p.N_sym
-            bits_tx = transmisor.generate_bits(p.N_sym)
-            ak_symbols = transmisor.map_bits_to_symbols(bits_tx)
-            X_matrix = transmisor.build_ifft_input_matrix(ak_symbols, p.N_sym)
+            if use_pilots_and_eq:
+                # 1. Calcular cuántos bits de DATOS se necesitan por tanda
+                carriers = np.arange(p.K)
+                pilot_idx = carriers[::p.PILOT_SPACING]
+                data_idx  = np.delete(carriers, pilot_idx)
+                num_data_per_sym = len(data_idx)
+                num_data_bits_per_batch = p.N_sym * num_data_per_sym * p.mu
+                
+                # 2. Generar EXACTAMENTE ese número de bits aleatorios
+                #    En lugar de usar la función antigua, lo hacemos directamente.
+                bits_tx_to_compare = p.RNG.integers(low=0, high=2, size=num_data_bits_per_batch)
+
+                # 3. [PASO QUE FALTABA] Mapear esos bits a símbolos QPSK complejos
+                data_symbols_flat = transmisor.map_bits_to_symbols(bits_tx_to_compare)
+
+                # 4. Ahora sí, construir la matriz de IFFT con los símbolos de datos correctos
+                X_matrix = transmisor.build_ifft_input_matrix_with_pilots(data_symbols_flat, p.N_sym)
+            else:
+                # Generar un bloque completo de bits (todos son datos)
+                bits_tx_to_compare = transmisor.generate_bits(p.N_sym)
+                ak_symbols = transmisor.map_bits_to_symbols(bits_tx_to_compare)
+                X_matrix = transmisor.build_ifft_input_matrix(ak_symbols, p.N_sym)
+
+            # Resto de la cadena del transmisor (común a ambos casos)
             x_time = transmisor.modulate_with_ifft(X_matrix)
             x_time_with_cp = transmisor.add_cyclic_prefix(x_time)
             tx_signal = transmisor.parallel_to_serial(x_time_with_cp)
             
             # --- Canal ---
-            # En cada llamada, si el tipo es "multitap_awgn", la función
-            # apply_channel generará un nuevo h[n] aleatorio.
-            rx_signal = ch.apply_channel(tx_signal, channel_type, ebn0_db)
+            base_channel_type = "multitap_awgn" if "multitap" in channel_type else "awgn"
+            rx_signal = ch.apply_channel(tx_signal, base_channel_type, ebn0_db)
             
             # --- Receptor ---
             rx_matrix_with_cp = receptor.serial_to_parallel(rx_signal, p.N_sym)
             rx_matrix_no_cp = receptor.remove_cyclic_prefix(rx_matrix_with_cp)
             Y_matrix = receptor.demodulate_with_fft(rx_matrix_no_cp)
-            bits_rx = receptor.extract_and_demap_symbols(Y_matrix, p.N_sym)
             
-            # --- Acumular resultados ---
-            errores_en_tanda = np.sum(bits_tx != bits_rx)
+            if use_pilots_and_eq:
+                X_equalized_symbols = receptor.estimate_and_equalize(Y_matrix)
+                bits_rx = receptor.demap_equalized_symbols(X_equalized_symbols)
+            else:
+                bits_rx = receptor.extract_and_demap_symbols(Y_matrix, p.N_sym)
+
+            # --- Acumular Resultados ---
+            errores_en_tanda = np.sum(bits_tx_to_compare != bits_rx)
             total_errores += errores_en_tanda
-            total_bits_simulados += len(bits_tx)
+            total_bits_simulados += len(bits_tx_to_compare)
             
             print(f"\r  -> Bits simulados: {total_bits_simulados}, Errores contados: {total_errores}", end="")
-
-        # --- El resto de la función no cambia ---
+        # --- Calcular y guardar el BER ---
         ber_calculado = total_errores / total_bits_simulados if total_bits_simulados > 0 else 0
         ber_results.append(ber_calculado)
         

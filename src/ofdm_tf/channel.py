@@ -109,7 +109,7 @@ def required_cp_length(h, **kwargs):
 # T_obs está en segundos, fsamp en Hz. Ts = 1/fsamp.
 sampling_period_us = (1 / p.fsamp) * 1e6
 
-# CAMBIO 4: Calcular L_CP_req usando el perfil estático
+# Calcular L_CP_req usando el perfil estático
 # Creamos el perfil de retardos basado en el Ts real de nuestro sistema.
 h_static_profile = get_static_channel_profile(CHANNEL_TABLE, Ts_us=sampling_period_us)
 
@@ -156,7 +156,7 @@ def apply_channel(signal, channel_type="ideal", ebn0_db=None):
         # Ahora llamamos a la nueva función basada en SNR de utils.
         return u.add_awgn_snr(signal, ebn0_db)
     
-    elif channel_type == "multitap_awgn":
+    elif channel_type in ["multitap_awgn", "multitap_eq"]:
         if ebn0_db is None:
             raise ValueError("El canal 'multitap_awgn' requiere un valor para ebn0_db.")
             
