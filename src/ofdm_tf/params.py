@@ -11,11 +11,11 @@ import numpy as np
 RNG = np.random.default_rng(seed=42)
 
 # --- Parámetros Base de la Simulación ---------------------------------
-K = 20          # número de subportadoras
-N = 32          # Tamaño de la IFFT/DFT (N > K). Cantidad de muestras.
+K = 48          # número de subportadoras
+N = 64          # Tamaño de la IFFT/DFT (N > K). Cantidad de muestras.
                 # Elegimos una potencia de 2 o un número con factores pequeños para una IFFT eficiente.
 M = 4           # Orden de modulación (4-QPSK)
-L = 7   # Longitud del prefijo cíclico
+L = 2   # Longitud del prefijo cíclico
 N_sym = 2000  # Número de símbolos OFDM a simular
 
 # --- Parámetros de la Señal ------------------------------------------
@@ -28,6 +28,10 @@ T_obs = 1 / f_delta   # Duración del símbolo útil (sin CP)
 fsamp = N * f_delta   # Frecuencia de muestreo
 T_cp = L / fsamp      # Duración del prefijo cíclico
 T_s = T_obs + T_cp    # Duración total del símbolo OFDM
+
+# --- Parámetros de Pilotos ---
+PILOT_SPACING = 4  # Inserta un piloto cada 4 subportadoras
+PILOT_VALUE = (1+1j) / np.sqrt(2) # El valor complejo que tendrán los pilotos (conocido por Tx y Rx)
 
 # --- Verificaciones de Coherencia (Sanity Checks) --------------------
 print(f"Número de subportadoras de datos (K): {K}")

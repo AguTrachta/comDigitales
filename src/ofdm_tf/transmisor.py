@@ -53,3 +53,25 @@ def parallel_to_serial(x_time_with_cp):
     # "Aplana" una matriz multidimensional en un único vector de 1D,
     # recorriendo las filas de izquierda a derecha y de arriba a abajo.
     return x_time_with_cp.flatten()
+
+def build_ifft_input_matrix_with_pilots(data_symbols_flat, num_ofdm_symbols):
+    """
+    Construye la matriz de entrada para la IFFT, insertando pilotos
+    y los símbolos de datos proporcionados.
+    """
+    carriers_indices = np.arange(p.K)
+    pilot_indices = carriers_indices[::p.PILOT_SPACING]
+    data_indices = np.delete(carriers_indices, pilot_indices)
+    num_data_per_sym = len(data_indices)
+
+    ak_matrix_with_pilots = np.zeros((num_ofdm_symbols, p.K), dtype=complex)
+    ak_matrix_with_pilots[:, pilot_indices] = p.PILOT_VALUE
+    
+    data_symbols_reshaped = data_symbols_flat.reshape(num_ofdm_symbols, num_data_per_sym)
+    ak_matrix_with_pilots[:, data_indices] = data_symbols_reshaped
+
+    X_matrix = np.zeros((num_ofdm_symbols, p.N), dtype=complex)
+    for i in range(num_ofdm_symbols):
+        X_matrix[i, :] = mp.map_symbols_to_ifft_input(ak_matrix_with_pilots[i, :])
+        
+    return X_matrix
