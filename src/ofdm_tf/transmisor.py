@@ -7,6 +7,7 @@ Contiene funciones modulares para cada paso de la cadena de transmisión OFDM, p
 import numpy as np
 from . import params as p
 from . import mapping as mp
+from . import synchronization as sync
 
 def generate_bits(num_ofdm_symbols):
     """Bloque 1: Genera una secuencia de bits aleatorios."""
@@ -75,3 +76,28 @@ def build_ifft_input_matrix_with_pilots(data_symbols_flat, num_ofdm_symbols):
         X_matrix[i, :] = mp.map_symbols_to_ifft_input(ak_matrix_with_pilots[i, :])
         
     return X_matrix
+
+def build_full_frame(bits_tx):
+    """
+    Construye una trama OFDM completa, incluyendo el preámbulo de
+    sincronización y los símbolos de datos.
+    """
+    # 1. Generar el preámbulo de Schmidl & Cox
+    preamble_time = sync.generate_schmidl_cox_preamble()
+    
+    # 2. Añadirle su propio Prefijo Cíclico
+    # El CP del preámbulo es crucial para que la correlación funcione bien en canales multitap
+    preamble_cp = preamble_time[-p.L:]
+    preamble_with_cp = np.concatenate([preamble_cp, preamble_time])
+    
+    # 3. Procesar los bits de datos como antes
+    ak_symbols = map_bits_to_symbols(bits_tx)
+    X_matrix = build_ifft_input_matrix_with_pilots(ak_symbols, p.N_sym)
+    x_time = modulate_with_ifft(X_matrix)
+    x_time_with_cp = add_cyclic_prefix(x_time)
+    data_payload = parallel_to_serial(x_time_with_cp)
+    
+    # 4. Unir el preámbulo y los datos para formar la trama final
+    full_frame = np.concatenate([preamble_with_cp, data_payload])
+    
+    return full_frame
