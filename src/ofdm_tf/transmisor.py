@@ -86,32 +86,26 @@ def build_ifft_input_matrix_with_pilots(data_symbols_flat, num_ofdm_symbols):
 
 # En transmisor.py
 
-def build_full_frame(bits_tx, num_data_symbols):
+def build_full_frame(data_payload):
     """
-    Construye una trama OFDM completa, incluyendo el preámbulo de
-    sincronización y los símbolos de datos.
+    Construye una trama OFDM completa anteponiendo el preámbulo de
+    sincronización a una carga útil de datos ya procesada.
+
+    Args:
+        data_payload (np.ndarray): La señal de datos ya modulada, con CP y
+                                   serializada (la salida del Bloque 6).
+
+    Returns:
+        np.ndarray: La trama completa [PREÁMBULO_CON_CP, DATOS].
     """
-    # 1. Generar el preámbulo de Schmidl & Cox
+    # 1. Generar el preámbulo de Schmidl & Cox en el dominio del tiempo
     preamble_time = sync.generate_schmidl_cox_preamble()
     
     # 2. Añadirle su propio Prefijo Cíclico
     preamble_cp = preamble_time[-p.L:]
     preamble_with_cp = np.concatenate([preamble_cp, preamble_time])
     
-    # 3. Procesar los bits de datos
-    ak_symbols = map_bits_to_symbols(bits_tx)
-    
-    # Decidir si usar la función con o sin pilotos
-    if p.PILOT_SPACING is not None and p.PILOT_SPACING > 0:
-        X_matrix = build_ifft_input_matrix_with_pilots(ak_symbols, num_data_symbols)
-    else:
-        X_matrix = build_ifft_input_matrix(ak_symbols, num_data_symbols)
-
-    x_time = modulate_with_ifft(X_matrix)
-    x_time_with_cp = add_cyclic_prefix(x_time)
-    data_payload = parallel_to_serial(x_time_with_cp)
-    
-    # 4. Unir el preámbulo y los datos para formar la trama final
+    # 3. Unir el preámbulo y la carga útil de datos
     full_frame = np.concatenate([preamble_with_cp, data_payload])
     
     return full_frame
