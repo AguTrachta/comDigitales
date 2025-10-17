@@ -9,10 +9,17 @@ from . import params as p
 from . import mapping as mp
 from . import synchronization as sync
 
-def generate_bits(num_ofdm_symbols):
-    """Bloque 1: Genera una secuencia de bits aleatorios."""
-    n_total_bits = num_ofdm_symbols * p.K * p.mu
+def generate_all_bits(num_ofdm_symbols):
+    """Genera bits para llenar TODAS las K_TOTAL subportadoras."""
+    # Esta función asume un escenario sin pilotos
+    n_total_bits = num_ofdm_symbols * p.K_TOTAL * p.mu
     return p.RNG.integers(low=0, high=2, size=n_total_bits)
+
+def generate_data_bits(num_ofdm_symbols):
+    """Genera bits para llenar solo las K_DATA subportadoras."""
+    # Usa el parámetro K_DATA calculado en params.py
+    n_data_bits = num_ofdm_symbols * p.K_DATA * p.mu
+    return p.RNG.integers(low=0, high=2, size=n_data_bits)
 
 def map_bits_to_symbols(bits_tx):
     """Bloque 2: Mapea bits a símbolos de constelación QPSK."""
@@ -77,7 +84,9 @@ def build_ifft_input_matrix_with_pilots(data_symbols_flat, num_ofdm_symbols):
         
     return X_matrix
 
-def build_full_frame(bits_tx):
+# En transmisor.py
+
+def build_full_frame(bits_tx, num_data_symbols):
     """
     Construye una trama OFDM completa, incluyendo el preámbulo de
     sincronización y los símbolos de datos.
@@ -86,13 +95,18 @@ def build_full_frame(bits_tx):
     preamble_time = sync.generate_schmidl_cox_preamble()
     
     # 2. Añadirle su propio Prefijo Cíclico
-    # El CP del preámbulo es crucial para que la correlación funcione bien en canales multitap
     preamble_cp = preamble_time[-p.L:]
     preamble_with_cp = np.concatenate([preamble_cp, preamble_time])
     
-    # 3. Procesar los bits de datos como antes
+    # 3. Procesar los bits de datos
     ak_symbols = map_bits_to_symbols(bits_tx)
-    X_matrix = build_ifft_input_matrix_with_pilots(ak_symbols, p.N_sym)
+    
+    # Decidir si usar la función con o sin pilotos
+    if p.PILOT_SPACING is not None and p.PILOT_SPACING > 0:
+        X_matrix = build_ifft_input_matrix_with_pilots(ak_symbols, num_data_symbols)
+    else:
+        X_matrix = build_ifft_input_matrix(ak_symbols, num_data_symbols)
+
     x_time = modulate_with_ifft(X_matrix)
     x_time_with_cp = add_cyclic_prefix(x_time)
     data_payload = parallel_to_serial(x_time_with_cp)
