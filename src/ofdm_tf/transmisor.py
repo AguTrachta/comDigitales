@@ -84,8 +84,6 @@ def build_ifft_input_matrix_with_pilots(data_symbols_flat, num_ofdm_symbols):
         
     return X_matrix
 
-# En transmisor.py
-
 def build_full_frame(data_payload):
     """
     Construye una trama OFDM completa anteponiendo el preámbulo de
@@ -109,3 +107,141 @@ def build_full_frame(data_payload):
     full_frame = np.concatenate([preamble_with_cp, data_payload])
     
     return full_frame
+
+def create_packet_from_bits(data_bits, use_pilots=False):
+    """
+    Función maestra del transmisor: crea un paquete OFDM completo.
+    
+    Flujo:
+    1. Valida los bits de entrada
+    2. Mapea bits a símbolos QPSK
+    3. Construye matriz de IFFT (con o sin pilotos)
+    4. Modula con IFFT
+    5. Añade prefijo cíclico
+    6. Serializa
+    7. Antepone el preámbulo
+    
+    Args:
+        data_bits: Array 1D de bits (0s y 1s) para el payload
+        use_pilots: Si es True, usa pilotos y K_DATA subportadoras
+    
+    Returns:
+        np.ndarray: Señal completa [PREÁMBULO + PAYLOAD] lista para transmitir
+    """
+    
+    # --- 1. Validación y cálculo de parámetros ---
+    if use_pilots:
+        num_data_bits_per_sym = p.K_DATA * p.mu
+    else:
+        num_data_bits_per_sym = p.K_TOTAL * p.mu
+    
+    if len(data_bits) % num_data_bits_per_sym != 0:
+        raise ValueError(
+            f"El número de bits ({len(data_bits)}) no es múltiplo de "
+            f"los bits por símbolo ({num_data_bits_per_sym}). "
+            f"use_pilots={use_pilots}"
+        )
+    
+    num_ofdm_symbols = len(data_bits) // num_data_bits_per_sym
+    
+    # --- 2. Cadena de procesamiento ---
+    
+    # Bloque 2: Mapeo bits → símbolos
+    data_symbols_flat = map_bits_to_symbols(data_bits)
+    
+    # Bloque 3: Construcción de matriz de IFFT
+    if use_pilots:
+        X_matrix = build_ifft_input_matrix_with_pilots(data_symbols_flat, num_ofdm_symbols)
+    else:
+        X_matrix = build_ifft_input_matrix(data_symbols_flat, num_ofdm_symbols)
+    
+    # Bloque 4: Modulación IFFT
+    x_time = modulate_with_ifft(X_matrix)
+    
+    # Bloque 5: Añadir CP
+    x_time_with_cp = add_cyclic_prefix(x_time)
+    
+    # Bloque 6: Paralelo a Serie
+    data_payload_serial = parallel_to_serial(x_time_with_cp)
+    
+    # --- 3. Ensamblaje del paquete ---
+    full_packet_signal = build_full_frame(data_payload_serial)
+    
+    return full_packet_signal
+
+def create_packets_from_bits(all_data_bits, symbols_per_packet=100, use_pilots=False):
+    """
+    Divide bits en múltiples paquetes OFDM independientes.
+    
+    Args:
+        all_data_bits: Todos los bits a transmitir
+        symbols_per_packet: Símbolos OFDM por paquete
+        use_pilots: Si se usan pilotos
+    
+    Returns:
+        list: Lista de paquetes (arrays complejos), cada uno con su preámbulo
+    """
+    
+    # Calcular bits por símbolo según configuración
+    if use_pilots:
+        bits_per_symbol = p.K_DATA * p.mu
+    else:
+        bits_per_symbol = p.K_TOTAL * p.mu
+    
+    # Calcular bits por paquete
+    bits_per_packet = symbols_per_packet * bits_per_symbol
+    
+    # Aplicar padding si es necesario
+    total_bits = len(all_data_bits)
+    if total_bits % bits_per_packet != 0:
+        padding_needed = bits_per_packet - (total_bits % bits_per_packet)
+        all_data_bits = np.concatenate([all_data_bits, np.zeros(padding_needed, dtype=int)])
+        print(f"⚠ Se añadieron {padding_needed} bits de padding")
+    
+    # Dividir en chunks
+    num_packets = len(all_data_bits) // bits_per_packet
+    packets = []
+    
+    print(f"\n{'='*60}")
+    print(f"CREANDO {num_packets} PAQUETES")
+    print(f"{'='*60}")
+    print(f"Bits totales: {len(all_data_bits)}")
+    print(f"Símbolos por paquete: {symbols_per_packet}")
+    print(f"Bits por símbolo: {bits_per_symbol}")
+    print(f"Bits por paquete: {bits_per_packet}")
+    print(f"Usando pilotos: {'Sí' if use_pilots else 'No'}")
+    print(f"{'='*60}\n")
+    
+    for i in range(num_packets):
+        # Extraer bits del paquete actual
+        start_idx = i * bits_per_packet
+        end_idx = start_idx + bits_per_packet
+        packet_bits = all_data_bits[start_idx:end_idx]
+        
+        # Crear el paquete OFDM
+        packet_signal = create_packet_from_bits(packet_bits, use_pilots)
+        packets.append(packet_signal)
+        
+        # Información del paquete
+        preamble_len = p.N + p.L
+        payload_len = symbols_per_packet * (p.N + p.L)
+        total_len = preamble_len + payload_len
+        
+        if i == 0:  # Solo mostrar detalles del primer paquete
+            print(f"Estructura del paquete:")
+            print(f"  - Preámbulo: {preamble_len} muestras")
+            print(f"  - Payload: {payload_len} muestras ({symbols_per_packet} símbolos)")
+            print(f"  - Total: {total_len} muestras")
+            print(f"  - Real: {len(packet_signal)} muestras\n")
+        
+        if (i + 1) % 5 == 0 or i == 0 or i == num_packets - 1:
+            print(f"✓ Paquete {i+1}/{num_packets} creado")
+    
+    print(f"\n{'='*60}")
+    print(f"✓ {num_packets} paquetes creados exitosamente")
+    print(f"{'='*60}\n")
+    
+    return packets
+
+
+print("Módulo 'transmisor.py' cargado y listo.")
