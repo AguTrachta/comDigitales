@@ -13,6 +13,7 @@ from . import demapping as dmp
 from . import channel as ch
 from . import transmisor as transmisor
 from . import receptor as receptor
+from . import synchronization as sync
 
 # ============================================================
 # Conversión entre escalas
@@ -164,21 +165,56 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
                 X_matrix = transmisor.build_ifft_input_matrix_with_pilots(data_symbols_flat, p.N_sym)
             else:
                 # Generar un bloque completo de bits (todos son datos)
-                bits_tx_to_compare = transmisor.generate_bits(p.N_sym)
+                bits_tx_to_compare = transmisor.generate_all_bits(p.N_sym)
                 ak_symbols = transmisor.map_bits_to_symbols(bits_tx_to_compare)
                 X_matrix = transmisor.build_ifft_input_matrix(ak_symbols, p.N_sym)
 
             # Resto de la cadena del transmisor (común a ambos casos)
             x_time = transmisor.modulate_with_ifft(X_matrix)
             x_time_with_cp = transmisor.add_cyclic_prefix(x_time)
-            tx_signal = transmisor.parallel_to_serial(x_time_with_cp)
-            
+            data_payload_tx = transmisor.parallel_to_serial(x_time_with_cp)
+
+            # --- NUEVO: Construir la Trama Completa ---
+            # Ahora añadimos el preámbulo a la carga útil de datos.
+            tx_full_frame = transmisor.build_full_frame(data_payload_tx)
+
             # --- Canal ---
-            base_channel_type = "multitap_awgn" if "multitap" in channel_type else "awgn"
-            rx_signal = ch.apply_channel(tx_signal, base_channel_type, ebn0_db)
+            # Aplicamos el canal a la trama completa (preámbulo + datos).
+            # (No se añade padding, el receptor debe encontrar el inicio en la muestra 0)
+            rx_full_frame = ch.apply_channel(tx_full_frame, channel_type, ebn0_db)
             
             # --- Receptor ---
-            rx_matrix_with_cp = receptor.serial_to_parallel(rx_signal, p.N_sym)
+            
+            # --- NUEVO: Sincronización de Trama ---
+            _, M_d_values = sync.calculate_timing_metric(rx_full_frame)
+            
+            # Usamos el método robusto. Con ruido, puede que no supere 0.95,
+            # así que usamos argmax como respaldo si falla.
+            umbral_deteccion = 0.9 # Bajamos un poco el umbral para el ruido
+            try:
+                best_offset = np.nonzero(np.array(M_d_values) > umbral_deteccion)[0][0]
+            except IndexError:
+                best_offset = sync.estimate_timing_offset(M_d_values)
+                
+            # Extraer la carga útil basándose en el offset detectado
+            len_preambulo_cp = p.L + p.N
+            start_of_data = best_offset + len_preambulo_cp
+            len_data_payload = p.N_sym * (p.N + p.L)
+            end_of_data = start_of_data + len_data_payload
+            
+            rx_data_payload = rx_full_frame[start_of_data:end_of_data]
+            
+            # --- Verificación de Sincronización ---
+            # Si la sincronización falló, la longitud será incorrecta.
+            # En ese caso, contamos todos los bits de la tanda como errores.
+            if rx_data_payload.shape[0] != len_data_payload:
+                total_errores += len(bits_tx_to_compare)
+                total_bits_simulados += len(bits_tx_to_compare)
+                print(f"\r  -> ¡Fallo de Sincronización! Bits: {total_bits_simulados}, Errores: {total_errores}", end="")
+                continue # Pasar a la siguiente iteración de la tanda
+                
+            # --- Continuación de la cadena del receptor con los datos sincronizados ---
+            rx_matrix_with_cp = receptor.serial_to_parallel(rx_data_payload, p.N_sym)
             rx_matrix_no_cp = receptor.remove_cyclic_prefix(rx_matrix_with_cp)
             Y_matrix = receptor.demodulate_with_fft(rx_matrix_no_cp)
             
