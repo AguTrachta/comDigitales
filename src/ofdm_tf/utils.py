@@ -124,12 +124,13 @@ def add_awgn_snr(signal, ebn0_db):
     
     return signal + noise
 
-def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type="awgn"):
+def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type="awgn", min_tandas=10):
     """
     Ejecuta una simulación OFDM de Monte Carlo sobre un rango de Eb/N0.
     Utiliza los parámetros globales (p.N_sym) para definir el tamaño de cada tanda.
     """
     print(f"--- Iniciando Simulación de Monte Carlo para Canal '{channel_type}' ---")
+    print(f"Parámetros: min_errors={min_errors}, max_bits={max_bits}, min_tandas={min_tandas}")
     ber_results = []
     start_time_total = time.time()
 
@@ -139,11 +140,12 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
     for ebn0_db in ebn0_db_range:
         total_bits_simulados = 0
         total_errores = 0
+        total_tandas_simuladas = 0
         start_time_point = time.time()
         
         print(f"\nSimulando para Eb/N0 = {ebn0_db} dB...")
 
-        while total_errores < min_errors and total_bits_simulados < max_bits:
+        while (total_errores < min_errors or total_tandas_simuladas < min_tandas) and (total_bits_simulados < max_bits):
             # --- Transmisor ---
             if use_pilots_and_eq:
                 # 1. Calcular cuántos bits de DATOS se necesitan por tanda
@@ -192,8 +194,9 @@ def run_montecarlo_simulation(ebn0_db_range, min_errors, max_bits, channel_type=
             errores_en_tanda = np.sum(bits_tx_to_compare != bits_rx)
             total_errores += errores_en_tanda
             total_bits_simulados += len(bits_tx_to_compare)
+            total_tandas_simuladas += 1 
             
-            print(f"\r  -> Bits simulados: {total_bits_simulados}, Errores contados: {total_errores}", end="")
+            print(f"\r  -> Tandas: {total_tandas_simuladas}, Bits: {total_bits_simulados}, Errores: {total_errores}", end="")
         # --- Calcular y guardar el BER ---
         ber_calculado = total_errores / total_bits_simulados if total_bits_simulados > 0 else 0
         ber_results.append(ber_calculado)
