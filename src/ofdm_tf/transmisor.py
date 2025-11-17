@@ -7,11 +7,19 @@ Contiene funciones modulares para cada paso de la cadena de transmisión OFDM, p
 import numpy as np
 from . import params as p
 from . import mapping as mp
+from . import synchronization as sync
 
-def generate_bits(num_ofdm_symbols):
-    """Bloque 1: Genera una secuencia de bits aleatorios."""
-    n_total_bits = num_ofdm_symbols * p.K * p.mu
+def generate_all_bits(num_ofdm_symbols):
+    """Genera bits para llenar TODAS las K_TOTAL subportadoras."""
+    # Esta función asume un escenario sin pilotos
+    n_total_bits = num_ofdm_symbols * p.K_TOTAL * p.mu
     return p.RNG.integers(low=0, high=2, size=n_total_bits)
+
+def generate_data_bits(num_ofdm_symbols):
+    """Genera bits para llenar solo las K_DATA subportadoras."""
+    # Usa el parámetro K_DATA calculado en params.py
+    n_data_bits = num_ofdm_symbols * p.K_DATA * p.mu
+    return p.RNG.integers(low=0, high=2, size=n_data_bits)
 
 def map_bits_to_symbols(bits_tx):
     """Bloque 2: Mapea bits a símbolos de constelación QPSK."""
@@ -75,3 +83,29 @@ def build_ifft_input_matrix_with_pilots(data_symbols_flat, num_ofdm_symbols):
         X_matrix[i, :] = mp.map_symbols_to_ifft_input(ak_matrix_with_pilots[i, :])
         
     return X_matrix
+
+# En transmisor.py
+
+def build_full_frame(data_payload):
+    """
+    Construye una trama OFDM completa anteponiendo el preámbulo de
+    sincronización a una carga útil de datos ya procesada.
+
+    Args:
+        data_payload (np.ndarray): La señal de datos ya modulada, con CP y
+                                   serializada (la salida del Bloque 6).
+
+    Returns:
+        np.ndarray: La trama completa [PREÁMBULO_CON_CP, DATOS].
+    """
+    # 1. Generar el preámbulo de Schmidl & Cox en el dominio del tiempo
+    preamble_time = sync.generate_schmidl_cox_preamble()
+    
+    # 2. Añadirle su propio Prefijo Cíclico
+    preamble_cp = preamble_time[-p.L:]
+    preamble_with_cp = np.concatenate([preamble_cp, preamble_time])
+    
+    # 3. Unir el preámbulo y la carga útil de datos
+    full_frame = np.concatenate([preamble_with_cp, data_payload])
+    
+    return full_frame
